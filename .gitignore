@@ -1,0 +1,5 @@
+// Keep generated build outputs, projects, and local secrets out of git.
+.env
+data/projects/*.json
+data/builds/*
+!data/builds/.gitkeep

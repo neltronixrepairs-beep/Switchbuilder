@@ -1,34 +1,39 @@
-# Switchbuilder
+# Switchbuilder Autopilot APK builds
 
-Switchbuilder is a mobile-first AI Android app builder. Users describe an app in normal language, receive a structured app definition, preview it on a phone canvas, save it, reopen it, and continue iterating.
+Switchbuilder now includes a real Android build pipeline. A validated schema is converted into a generated native Android project, Gradle is invoked, and the produced `app-release.apk` is copied to a build artifact directory. The server never reports success unless that APK exists.
 
-## Run
+## Build prerequisites
 
-Requires Node.js 18+:
+Real APK builds require a build host with:
+
+- Node.js 18+
+- Java 17+
+- Android SDK with platform 35 and build-tools installed
+- Gradle 8.7+ available as `gradle`, or set `GRADLE_COMMAND` to an installed Gradle executable
+- Network access on the first build so Gradle can resolve the Android Gradle Plugin
+
+Example environment:
 
 ```bash
 cp .env.example .env
+export ANDROID_SDK_ROOT=$HOME/Android/Sdk
+export PATH="$PATH:$ANDROID_SDK_ROOT/platform-tools"
 node server.js
 ```
 
-Open `http://localhost:8787`. The server serves the mobile web app and provides the project/API endpoints.
+The generated project uses Android Gradle Plugin 8.5.2 and compiles a native Java Android activity. If the host lacks these prerequisites, the UI reports the actual Gradle/startup error and no download is offered.
 
-## AI configuration
+## Autopilot flow
 
-The app works immediately without a key using a deterministic local generator for development. For real AI generation, configure these environment variables (do not put secrets in `app.js`):
+Prompt → AI/local schema generation → server validation → queued → building → Gradle → verified APK artifact → download.
 
-- `AI_API_KEY` — provider API key
-- `AI_API_URL` — OpenAI-compatible chat completions URL
-- `AI_MODEL` — model name, default `gpt-4o-mini`
+`POST /api/build` accepts only a valid schema. Builds run in isolated per-build directories under `data/builds`, use a fixed command (`gradle --no-daemon --stacktrace assembleRelease`), have a configurable timeout (`BUILD_TIMEOUT_MS`, default 10 minutes), and never execute prompt text as a command. Successful APKs are available from `GET /api/builds/:id/download`.
 
-The server sends the current app schema and the user's change request, then validates the returned JSON before updating the preview.
+Build status is available at `GET /api/builds/:id`. The Android build-worker adapter is intentionally local and synchronous-in-a-background-process; it can later be moved to a queue/worker service without changing the frontend API.
 
-## Structured app schema
+## Configuration
 
-Generated apps use `version`, `app`, `theme`, `navigation`, and `screens`. Screen elements currently support `text`, `button`, `input`, `list`, `card`, `form`, and `spacer`. This schema is intentionally renderer- and build-worker-friendly.
-
-## Persistence and build boundary
-
-Projects persist as JSON files under `data/projects` through `GET/POST/PUT /api/projects`. The client also keeps an emergency local draft if the server is unavailable. `POST /api/build` is a real service boundary, but returns a clear `501` until `BUILD_WORKER_URL` points to an implemented Android build worker. No fake APK is generated.
-
-For production, replace file persistence with authenticated database storage and implement the build-worker adapter without exposing provider or worker secrets to the browser.
+- `PORT` — HTTP port
+- `AI_API_KEY`, `AI_API_URL`, `AI_MODEL` — optional AI backend
+- `GRADLE_COMMAND` — Gradle executable or absolute path
+- `BUILD_TIMEOUT_MS` — build timeout
